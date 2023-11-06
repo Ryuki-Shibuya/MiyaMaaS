@@ -149,14 +149,38 @@ function initMap() {
       });
     }
   });
+}
+
+// バスが選択された場合
+const defaultStr = 'T32212332323191:F33211221200001:A23121141:';//初期値はデフォルト
+let detailStr = defaultStr;
+
+const busCheckbox = document.getElementById('busCheckbox');
+busCheckbox.addEventListener('change', function() {
+  if (busCheckbox.checked) {
+    //チェックされた状態の時は
+    fetchAndExtractConditionData(localBusOnly)
+    .then(courseDetail => {
+      detailStr = courseDetail;
+      console.log(detailStr);
+      console.log('ボタンチェックされました');
+    })
+    .catch(error => {
+      console.error('APIリクエストエラー:', error);
+    });
+  } else {//チェックがはずされた状態の時は
+    detailStr = defaultStr;
+    console.log(detailStr);
+    console.log('ボタンチェックが外されました');
+  }
+});
+
 
   // 検索ボタンがクリックされたとき
   const searchButton = document.getElementById('search-button');
   searchButton.addEventListener('click', () => {
-    request(departureLat, departureLng, arrivalLat, arrivalLng);
+    request(departureLat, departureLng, arrivalLat, arrivalLng, detailStr);
   });
-}
-
 
 //マーカー立てる関数
 function addMarker(map,lat,lng,title, icon){
@@ -192,12 +216,39 @@ function geocoder(address, callback) {
   });
 }
 
+const localBusOnly = 'true';
+function fetchAndExtractConditionData() {
+  return new Promise((resolve, reject) => {
+    const requestURL = `${apiBaseUrl}${courseConditionToolEndpoint}?key=${mixwayAPIKey}&localBusOnly=${localBusOnly}`;
+    fetch(requestURL)
+      .then(response => {
+        if (!response.ok) {
+          throw Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(data => {
+        // JSONデータから探索条件を取得
+        const courseDetail = data.ResultSet.Condition;
+        resolve(courseDetail);
+        return courseDetail;
+      })
+      .catch(error => {
+        reject(error);
+      });
+  });
+}
+
+
+
+
+
 
 //APIをリクエストする関数
-function request(departureLat, departureLng, arrivalLat, arrivalLng) {
+function request(departureLat, departureLng, arrivalLat, arrivalLng, detailStr) {
   // URLリクエストの例
   // https://mixway.ekispert.jp/v1/json/search/course/extreme?key=[アクセスキー]&viaList=35.6585805,139.7454329:35.6715869,139.6967028
-  const requestUrl = `${apiBaseUrl}${routeSearchEndpoint}?key=${mixwayAPIKey}&viaList=${departureLat},${departureLng}:${arrivalLat},${arrivalLng}`;
+  const requestUrl = `${apiBaseUrl}${routeSearchEndpoint}?key=${mixwayAPIKey}&viaList=${departureLat},${departureLng}:${arrivalLat},${arrivalLng}&conditionDetail=${detailStr}`;
   fetch(requestUrl)
     .then(response => {
       if (!response.ok) {
@@ -250,15 +301,19 @@ function displayRouteList(courseData) {
     // list中身
     const routeInfo = `
       <div class="result-list" data-index="${i}">
-        <p>ID: ${i}</p>
-        <p>
-          ${departureTime} -> ${arrivalTime}
-        </p>
-        <p>経路: 出発地→${stationInfo.join("→")}→目的地</p>
-        <p>金額: ${totalPrice}  円</p>
+        <div class='number'>
+          <p>${i + 1}</p>
+        </div>
+        <div class='route-info'>
+          <div class = 'time'><p>${departureTime} → ${arrivalTime}</p></div>
+          <p>経路: 出発地 → ${stationInfo.join(" → ")} → 目的地</p>
+          <p><i class="fa-solid fa-wallet"></i> ${totalPrice} 円</p>
+        </div>
+        <div class='allow'>
+          <i class="fa-solid fa-chevron-right"></i>
+        </div>
       </div>
     `;
-
     resultHTML.push(routeInfo);
   }
 
@@ -308,7 +363,7 @@ function displayRouteDetails(course) {
     <div id="result-detail-entire">
       <button id="goto-lists-button"><<一覧へ</button></br>
       <p>${departureDate}   ${departureTime} → ${arrivalTime}</p>
-      <p>${totalPrice} 円</p>
+      <p><i class="fa-solid fa-wallet"></i> ${totalPrice} 円</p>
     </div>
   `);
 
@@ -322,15 +377,15 @@ function displayRouteDetails(course) {
 
       detailHTML.push(`
         <div class="result-detail">
-          <div class="time">
-            ${pointDepartureTime} 発
-          </div>
-          <div class="point">
-            ${pointName}
+          <div class= 'detail_container'>
+            <div class="time time-container">
+              ${pointDepartureTime} 
+            </div>
+            <div class="point">
+              ${pointName}
+            </div>
           </div>
           <div class="line">
-            <br>
-            <br>
             ${lineName}
           </div>
         </div>
@@ -342,15 +397,15 @@ function displayRouteDetails(course) {
     
       detailHTML.push(`
         <div class="result-detail">
-          <div class="time">
-            ${pointArrivalTime} 着</br>
+          <div class= 'detail_container'>
+            <div class="time time-container">
+              ${pointArrivalTime} </br>
+            </div>
+            <div class="point">
+              ${pointName}</br>
+            </div>
           </div>
-          <div class="point">
-            ${pointName}</br>
-          </div>
-          <div class="line">
-            <!-- 空の <div class="line"> を挿入 -->
-          </div>
+          
         </div>
       `);
     } else if (course.Route.Point[i].Station == null) {
@@ -362,17 +417,17 @@ function displayRouteDetails(course) {
 
       detailHTML.push(`
         <div class="result-detail">
-          <div class="time">
-            ${pointArrivalTime} 着</br>
-            ${pointDepartureTime} 発</br>
-          </div>
-          <div class="point">
-            ${pointName}
+          <div class= 'detail_container'>
+            <div class="time time-container">
+              ${pointArrivalTime} </br>
+              ${pointDepartureTime} </br>
+            </div>
+            <div class="point">
+              ${pointName}
+            </div>
           </div>
           <div class="line">
-            <br>
-            <br>
-            ${lineName}
+            <p><i class="fa-solid fa-person-walking"></i></p>${lineName}
           </div>
         </div>
       `);
@@ -386,16 +441,17 @@ function displayRouteDetails(course) {
 
       detailHTML.push(`
         <div class="result-detail">
-          <div class="time">
-            ${nodeArrivalTime} 着</br>
-            ${nodeDepartureTime} 発</br>
+        <div class= 'detail_container'>
+          <div class="time time-container">
+            ${nodeArrivalTime} </br>
+            ${nodeDepartureTime} </br>
           </div>
           <div class="point">
             ${pointName}
           </div> 
+        </div>
+          
           <div class="line">
-            <br>
-            <br>
             ${lineName}
           </div>
         </div>
@@ -406,7 +462,7 @@ function displayRouteDetails(course) {
   // 案内を開始ボタン
   detailHTML.push(`
     <div id="detail-button-area">
-      <button id="guide-start-button">案内を開始</button>
+      <button id="guide-start-button"><i class="fa-solid fa-route"></i> 案内を開始</button>
     </div>
   `) ;
 
